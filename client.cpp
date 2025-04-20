@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <iostream>
 
+
 int main() {
     // get socket (allocate socket and get client socket fd)
     int client_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -19,8 +20,23 @@ int main() {
         return 1;
     }
 
+    // send test message to server
+    std::string test_message = "ping";
+    send(client_fd, test_message.c_str(), test_message.length(), 0);
+    std::cout << "Sent '" << test_message << "' to server\n";
+
+    // retrieve response sent from server
+    char buffer[64] = {};
+    ssize_t n = recv(client_fd, buffer, sizeof(buffer)-1, 0);
+    if(n <= 0){
+        std::cerr << "Error retriving response from server\n";
+        return 1;
+    }
+    std::cout << "Server says: " << buffer << "\n";
+
     // close client socket 
     close(client_fd);
+    std::cout << "Closed client socket\n";
 
     return 0;
 }
