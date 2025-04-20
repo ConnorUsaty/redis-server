@@ -5,7 +5,19 @@
 
 
 void handle_request(int client_fd){
-    std::cout << "Handled request from client: " << client_fd << "\n";
+    std::cout << "Connected to client: " << client_fd << "\n";
+
+    char buffer[64] = {};
+    ssize_t n = recv(client_fd, buffer, sizeof(buffer)-1, 0);
+    if(n <= 0){
+        std::cerr << "Error reading from client into buffer\n";
+        return;
+    }
+    std::cout << "Client says: '" << buffer << "'\n";
+
+    std::string response = "pong";
+    n = send(client_fd, response.c_str(), response.length(), 0);
+    std::cout << "Sent '" << response << "' to client\n";
 }
 
 
