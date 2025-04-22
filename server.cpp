@@ -1,22 +1,60 @@
+/* g++ -Wall -Wextra -O2 -g server.cpp -o server.exe */
+
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <unistd.h>
 #include <iostream>
+#include <cstring>
+#include <cassert>
+
+
+uint8_t read_all(int client_fd, char* buffer, int n_bytes){
+    /* Ensures that all requested n_bytes are read from socket into buffer. recv/read are not guarenteed to return all n_bytes. */
+    while(n_bytes){
+        ssize_t rv = recv(client_fd, buffer, n_bytes, 0);
+        if(rv <= 0){
+            return 1; // error or unexpected EOF
+        }
+        assert((int)rv <= n_bytes);
+        n_bytes -= rv;
+        buffer += rv; // move pointer to next avail location
+    }
+    return 0;
+}
+
+
+uint8_t write_all(int client_fd, char* buffer, int n_bytes){
+    /* Ensures that all requested n_bytes are written from buffer into socket. send/write are not guarenteed to return all n_bytes. */
+    while(n_bytes){
+        ssize_t rv = send(client_fd, buffer, n_bytes, 0);
+        if(rv <= 0){
+            return 1; // error
+        }
+        assert((int)rv <= n_bytes);
+        n_bytes -= rv;
+        buffer += rv; // move pointer to next unwritten location
+    }
+    return 0;
+}
 
 
 void handle_request(int client_fd){
     std::cout << "Connected to client: " << client_fd << "\n";
 
     char buffer[64] = {};
-    ssize_t n = recv(client_fd, buffer, sizeof(buffer)-1, 0);
-    if(n <= 0){
-        std::cerr << "Error reading from client into buffer\n";
+    uint8_t err = read_all(client_fd, buffer, 4);
+    if(err){
+        std::cerr << "Error reading from client\n";
         return;
     }
     std::cout << "Client says: '" << buffer << "'\n";
 
-    std::string response = "pong";
-    n = send(client_fd, response.c_str(), response.length(), 0);
+    char response[] = "pong";
+    err = write_all(client_fd, response, strlen(response));
+    if(err){
+        std::cerr << "Error writing to client\n";
+        return;
+    }
     std::cout << "Sent '" << response << "' to client\n";
 }
 
