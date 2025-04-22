@@ -1,3 +1,5 @@
+/* g++ -Wall -Wextra -O2 -g client.cpp -o client.exe */
+
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <unistd.h>
