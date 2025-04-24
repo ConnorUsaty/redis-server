@@ -4,6 +4,38 @@
 #include <netinet/ip.h>
 #include <unistd.h>
 #include <iostream>
+#include <cassert>
+#include <cstring>
+
+
+uint8_t read_all(int client_fd, char* buffer, int n_bytes){
+    /* Ensures that all requested n_bytes are read from socket into buffer. recv/read are not guarenteed to return all n_bytes. */
+    while(n_bytes){
+        ssize_t rv = recv(client_fd, buffer, n_bytes, 0);
+        if(rv <= 0){
+            return 1; // error or unexpected EOF
+        }
+        assert((int)rv <= n_bytes);
+        n_bytes -= rv;
+        buffer += rv; // move pointer to next avail location
+    }
+    return 0;
+}
+
+
+uint8_t write_all(int client_fd, char* buffer, int n_bytes){
+    /* Ensures that all requested n_bytes are written from buffer into socket. send/write are not guarenteed to return all n_bytes. */
+    while(n_bytes){
+        ssize_t rv = send(client_fd, buffer, n_bytes, 0);
+        if(rv <= 0){
+            return 1; // error
+        }
+        assert((int)rv <= n_bytes);
+        n_bytes -= rv;
+        buffer += rv; // move pointer to next unwritten location
+    }
+    return 0;
+}
 
 
 int main() {
@@ -23,14 +55,18 @@ int main() {
     }
 
     // send test message to server
-    std::string test_message = "ping";
-    send(client_fd, test_message.c_str(), test_message.length(), 0);
+    char test_message[] = "ping";
+    uint8_t err = write_all(client_fd, test_message, strlen(test_message));
+    if(err){
+        std::cerr << "Error sending message to server\n";
+        return 1;
+    }
     std::cout << "Sent '" << test_message << "' to server\n";
 
-    // retrieve response sent from server
-    char buffer[64] = {};
-    ssize_t n = recv(client_fd, buffer, sizeof(buffer)-1, 0);
-    if(n <= 0){
+    // read response from server
+    char buffer[5] = {};
+    err = read_all(client_fd, buffer, sizeof(buffer)-1);
+    if(err){
         std::cerr << "Error retriving response from server\n";
         return 1;
     }
