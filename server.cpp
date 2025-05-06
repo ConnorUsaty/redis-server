@@ -58,7 +58,7 @@ void handle_request(int client_fd) {
   std::cout << "Sent '" << response << "' to client\n";
 }
 
-int setup_socket(const int port) {
+int setup_socket(const int PORT) {
   // allocates a TCP socket and returns the fd
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   std::cout << "Created socket\n";
@@ -72,7 +72,7 @@ int setup_socket(const int port) {
   // set socket addresses
   struct sockaddr_in addr = {};
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
+  addr.sin_port = htons(PORT);
   addr.sin_addr.s_addr = htonl(0);  // wildcard IP 0.0.0.0
 
   // bind socket to the port
