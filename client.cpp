@@ -7,10 +7,13 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <string>
+#include <vector>
 
 uint8_t read_all(int client_fd, char* buffer, int n_bytes) {
   /* Ensures that all requested n_bytes are read from socket into buffer.
    * recv/read are not guarenteed to return all n_bytes. */
+
   while (n_bytes) {
     ssize_t rv = recv(client_fd, buffer, n_bytes, 0);
     if (rv <= 0) {
@@ -23,7 +26,7 @@ uint8_t read_all(int client_fd, char* buffer, int n_bytes) {
   return 0;
 }
 
-uint8_t write_all(int client_fd, char* buffer, int n_bytes) {
+uint8_t write_all(int client_fd, const char* buffer, int n_bytes) {
   /* Ensures that all requested n_bytes are written from buffer into socket.
    * send/write are not guarenteed to return all n_bytes. */
   while (n_bytes) {
@@ -36,6 +39,42 @@ uint8_t write_all(int client_fd, char* buffer, int n_bytes) {
     buffer += rv;  // move pointer to next unwritten location
   }
   return 0;
+}
+
+void send_message(int client_fd, std::string s) {
+  std::vector<uint8_t> write_buffer;
+  size_t msg_len = s.size();
+  write_buffer.insert(write_buffer.end(), (const uint8_t*)&msg_len,
+                      (const uint8_t*)&msg_len + 4);
+  write_buffer.insert(write_buffer.end(),
+                      reinterpret_cast<const uint8_t*>(s.data()),
+                      reinterpret_cast<const uint8_t*>(s.data()) + msg_len);
+  uint8_t err =
+      write_all(client_fd, reinterpret_cast<const char*>(write_buffer.data()),
+                write_buffer.size());
+
+  if (err) {
+    std::cerr << "Error sending message to server\n";
+    return;
+  }
+  std::cout << "Sent '" << s << "' to server\n";
+}
+
+void get_response(int client_fd) {
+  // get response length
+  char buffer[1024] = {};
+  uint8_t err = read_all(client_fd, buffer, 4);
+  uint32_t response_len = 0;
+  memcpy(&response_len, buffer, 4);
+
+  // read the response now that we know the length
+  err = read_all(client_fd, buffer + 4, response_len);
+  const char* server_response = buffer + 4;
+  if (err) {
+    std::cerr << "Error retriving response from server\n";
+    return;
+  }
+  std::cout << "Server says: " << server_response << "\n";
 }
 
 int main() {
@@ -56,26 +95,15 @@ int main() {
   }
 
   // send test message to server
-  char test_message[] = "ping";
-  uint8_t err = write_all(client_fd, test_message, strlen(test_message));
-  if (err) {
-    std::cerr << "Error sending message to server\n";
-    return 1;
+  std::vector<std::string> message_queue = {"ping", "ping", "random"};
+  for (const auto& s : message_queue) {
+    send_message(client_fd, s);
   }
-  std::cout << "Sent '" << test_message << "' to server\n";
-
-  // read response from server
-  char buffer[5] = {};
-  err = read_all(client_fd, buffer, sizeof(buffer) - 1);
-  if (err) {
-    std::cerr << "Error retriving response from server\n";
-    return 1;
+  for (int i = 0; i < static_cast<int>(message_queue.size()); ++i) {
+    get_response(client_fd);
   }
-  std::cout << "Server says: " << buffer << "\n";
 
-  // close client socket
   close(client_fd);
   std::cout << "Closed client socket\n";
-
   return 0;
 }
