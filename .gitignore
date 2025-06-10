@@ -31,5 +31,7 @@
 *.out
 *.app
 
-# examples
-examples/*
+examples
+examples*/*
+build
+build*/*
