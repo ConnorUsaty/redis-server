@@ -15,20 +15,21 @@
 #include "server.h"
 
 void respond_to_client(std::vector<uint8_t>& write_buf,
-                       const uint8_t* client_msg) {
+                       const uint8_t* client_msg, uint32_t msg_len) {
   /* Respond to client based on their message */
   const char* response;
-  if (strncmp(reinterpret_cast<const char*>(client_msg), "ping", 4) == 0) {
+  if (strncmp(reinterpret_cast<const char*>(client_msg), "ping", msg_len) ==
+      0) {
     response = "pong";
   } else {
     response = "unknown request";
   }
 
-  size_t msg_len = strlen(response);
-  write_buf.insert(write_buf.end(), (const uint8_t*)&msg_len,
-                   (const uint8_t*)&msg_len + 4);
+  size_t res_len = strlen(response);
+  write_buf.insert(write_buf.end(), (const uint8_t*)&res_len,
+                   (const uint8_t*)&res_len + 4);
   write_buf.insert(write_buf.end(), reinterpret_cast<const uint8_t*>(response),
-                   reinterpret_cast<const uint8_t*>(response) + msg_len);
+                   reinterpret_cast<const uint8_t*>(response) + res_len);
 }
 
 bool parse_buffer(Conn* conn) {
@@ -43,7 +44,7 @@ bool parse_buffer(Conn* conn) {
 
   const uint8_t* client_msg = &conn->read_buf[4];
   std::cout << "Client says: '" << client_msg << "'\n";
-  respond_to_client(conn->write_buf, client_msg);
+  respond_to_client(conn->write_buf, client_msg, msg_len);
 
   conn->read_buf.erase(conn->read_buf.begin(),
                        conn->read_buf.begin() + 4 + msg_len);
