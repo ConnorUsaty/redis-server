@@ -95,7 +95,9 @@ int main() {
   }
 
   // send test message to server
-  std::vector<std::string> message_queue = {"ping", "ping", "random"};
+  std::string large_str(1 << 8, '_');
+  std::vector<std::string> message_queue = {"ping", large_str, "ping",
+                                            large_str, "random"};
   for (const auto& s : message_queue) {
     send_message(client_fd, s);
   }
