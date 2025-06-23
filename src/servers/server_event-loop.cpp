@@ -184,9 +184,8 @@ int main() {
       poll_args.push_back(pfd);
     }
 
-    int rv = poll(poll_args.data(), static_cast<nfds_t>(poll_args.size()),
-                  -1);  // syscall that blocks until ANY of the fd in poll_args
-                        // become ready to perform I/O
+    // blocks until ANY of the fd in poll_args become ready to perform I/O
+    int rv = poll(poll_args.data(), static_cast<nfds_t>(poll_args.size()), -1);
     if (rv < 0 && errno == EINTR)
       continue;
     else if (rv < 0) {
