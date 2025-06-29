@@ -14,8 +14,8 @@
 
 #include "server.h"
 
-void respond_to_client(std::vector<uint8_t>& write_buf,
-                       const uint8_t* client_msg, uint32_t msg_len) {
+void respond_to_client(Buffer& write_buf, const uint8_t* client_msg,
+                       uint32_t msg_len) {
   /* Respond to client based on their message */
   const char* response;
   if (strncmp(reinterpret_cast<const char*>(client_msg), "ping", msg_len) ==
@@ -25,11 +25,10 @@ void respond_to_client(std::vector<uint8_t>& write_buf,
     response = "unknown request";
   }
 
-  size_t res_len = strlen(response);
-  write_buf.insert(write_buf.end(), (const uint8_t*)&res_len,
-                   (const uint8_t*)&res_len + 4);
-  write_buf.insert(write_buf.end(), reinterpret_cast<const uint8_t*>(response),
-                   reinterpret_cast<const uint8_t*>(response) + res_len);
+  uint32_t res_len = strlen(response);
+  write_buf.append((uint8_t*)&res_len,
+                   4);  // need to send res_len to client so it can parse
+  write_buf.append((uint8_t*)response, res_len);
 }
 
 bool parse_buffer(Conn* conn) {
@@ -42,12 +41,11 @@ bool parse_buffer(Conn* conn) {
     return false;
   }
 
-  const uint8_t* client_msg = &conn->read_buf[4];
+  const uint8_t* client_msg = conn->read_buf.data_start_ + 4;
   std::cout << "Client says: '" << client_msg << "'\n";
   respond_to_client(conn->write_buf, client_msg, msg_len);
 
-  conn->read_buf.erase(conn->read_buf.begin(),
-                       conn->read_buf.begin() + 4 + msg_len);
+  conn->read_buf.consume(msg_len + 4);
   return true;
 }
 
@@ -65,8 +63,7 @@ void handle_write(Conn* conn) {
     conn->want_read = true;
     conn->write_buf.clear();
   } else {
-    conn->write_buf.erase(conn->write_buf.begin(),
-                          conn->write_buf.begin() + rv);
+    conn->write_buf.consume(rv);
   }
 }
 
@@ -84,11 +81,7 @@ void handle_read(Conn* conn) {
     return;
   }
 
-  // add to current accumulated reads from this conn
-  auto i = conn->read_buf.size();
-  conn->read_buf.resize(i + rv);
-  memcpy(&conn->read_buf[i], buf, rv);
-
+  conn->read_buf.append(buf, rv);
   while (parse_buffer(conn)) {
   };
 
