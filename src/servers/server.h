@@ -27,16 +27,14 @@ struct Buffer {
   Buffer(Buffer&&) = delete;
   Buffer& operator=(Buffer&&) = delete;
 
-  size_t size() { return static_cast<size_t>(data_end_ - data_start_); }
+  size_t size() const { return static_cast<size_t>(data_end_ - data_start_); }
 
-  size_t capacity() { return static_cast<size_t>(buf_end_ - buf_start_); }
+  size_t capacity() const { return static_cast<size_t>(buf_end_ - buf_start_); }
 
-  void* data() { return static_cast<void*>(data_start_); }
-
-  void clear() { data_start_ = data_end_ = buf_start_; }
+  void* data() const { return static_cast<void*>(data_start_); }
 
   // for debugging purposes
-  void print_data() {
+  void print_data() const {
     uint8_t* p = data_start_;
     std::cout << "Buffer: {";
     while (p != data_end_) {
@@ -45,6 +43,8 @@ struct Buffer {
     }
     std::cout << "}\n";
   }
+
+  void clear() { data_start_ = data_end_ = buf_start_; }
 
   void consume(size_t sz) {
     assert(sz <= size());
