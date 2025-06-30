@@ -113,8 +113,8 @@ struct Conn {
 };
 
 // function forward declarations
-void respond_to_client(std::vector<uint8_t>& write_buf, std::string client_msg);
-bool parse_buffer(Conn* conn);
+void respond_to_client(Buffer& write_buf, const uint8_t* client_msg,
+                       uint32_t msg_len) bool parse_buffer(Conn* conn);
 void handle_write(Conn* conn);
 void handle_read(Conn* conn);
 void fd_set_nb(int fd);
