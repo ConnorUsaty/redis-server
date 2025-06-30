@@ -36,12 +36,12 @@ bool parse_buffer(Conn* conn) {
 
   // first 4 bytes in read_buf store size of msg in bytes
   uint32_t msg_len = 0;
-  memcpy(&msg_len, conn->read_buf.data(), 4);
+  memcpy(&msg_len, static_cast<void*>(conn->read_buf.data()), 4);
   if (4 + msg_len > conn->read_buf.size()) {
     return false;
   }
 
-  const uint8_t* client_msg = conn->read_buf.data_start_ + 4;
+  const uint8_t* client_msg = conn->read_buf.data() + 4;
   std::cout << "Client says: '" << client_msg << "'\n";
   respond_to_client(conn->write_buf, client_msg, msg_len);
 
@@ -51,8 +51,8 @@ bool parse_buffer(Conn* conn) {
 
 void handle_write(Conn* conn) {
   /* Non-blocking write to buffer */
-  ssize_t rv =
-      send(conn->fd, conn->write_buf.data(), conn->write_buf.size(), 0);
+  ssize_t rv = send(conn->fd, static_cast<void*>(conn->write_buf.data()),
+                    conn->write_buf.size(), 0);
   if (rv < 0) {
     if (errno != EAGAIN) conn->want_close = true;
     return;

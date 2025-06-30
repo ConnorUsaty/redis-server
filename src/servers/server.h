@@ -31,7 +31,7 @@ struct Buffer {
 
   size_t capacity() const { return static_cast<size_t>(buf_end_ - buf_start_); }
 
-  void* data() const { return static_cast<void*>(data_start_); }
+  uint8_t* data() const { return data_start_; }
 
   // for debugging purposes
   void print_data() const {
