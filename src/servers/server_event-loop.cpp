@@ -14,6 +14,32 @@
 
 #include "server.h"
 
+/* Need to parse client_msg which follows:
+ * n_strs | len1 | str1 | len2 | str2 | ...
+ * " | " is there for readability and is not actually in the msg */
+int parse_msg(Buffer& read_buf, std::vector<std::string>& str_list) {
+  size_t rel_buf_idx = 0;
+
+  uint32_t n_strs = 0;
+  memcpy(&n_strs, read_buf.data(), 4U);
+  if (n_strs == 0) return -1;
+  rel_buf_idx += 4;
+
+  while (str_list.size() < n_strs) {
+    uint32_t str_len = 0;
+    memcpy(&str_len, read_buf.data() + rel_buf_idx, 4U);
+    if (str_len == 0) return -1;
+    rel_buf_idx += 4;
+
+    std::string str;
+    str.assign((const char*)(read_buf.data() + rel_buf_idx),
+               static_cast<size_t>(str_len));
+    rel_buf_idx += str_len;
+  }
+
+  return 0;
+}
+
 void respond_to_client(Buffer& write_buf, const uint8_t* client_msg,
                        uint32_t msg_len) {
   /* Respond to client based on their message */
@@ -34,18 +60,24 @@ void respond_to_client(Buffer& write_buf, const uint8_t* client_msg,
 bool parse_buffer(Conn* conn) {
   if (conn->read_buf.size() < 4) return false;
 
-  // first 4 bytes in read_buf store size of msg in bytes
+  // first 4 bytes of msg stores total size of msg in bytes
+  // this size includes all lens and all strs in message
   uint32_t msg_len = 0;
   memcpy(&msg_len, static_cast<void*>(conn->read_buf.data()), 4);
   if (4 + msg_len > conn->read_buf.size()) {
     return false;
   }
 
-  const uint8_t* client_msg = conn->read_buf.data() + 4;
-  std::cout << "Client says: '" << client_msg << "'\n";
-  respond_to_client(conn->write_buf, client_msg, msg_len);
+  std::vector<std::string> str_list;
+  if (parse_msg(conn->read_buf, str_list) < 0) {
+    conn->want_close = true;
+    return;
+  }
+
+  // TODO: update respond_to_client() to handle str_list and call here
 
   conn->read_buf.consume(msg_len + 4);
+
   return true;
 }
 
