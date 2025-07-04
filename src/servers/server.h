@@ -97,7 +97,7 @@ class ServerBase {
   }
 };
 
-class ServerEventLoop final : public ServerBase {
+class ServerEventLoop final : private ServerBase {
  private:
   std::map<std::string, std::string> server_data_;
 
