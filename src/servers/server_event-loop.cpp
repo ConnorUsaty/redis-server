@@ -9,19 +9,22 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <string>
 #include <vector>
 
 #include "server.h"
 
+static std::map<std::string, std::string> server_data;
+
 /* Need to parse client_msg which follows:
  * n_strs | len1 | str1 | len2 | str2 | ...
  * " | " is there for readability and is not actually in the msg */
 int parse_msg(Buffer& read_buf, std::vector<std::string>& str_list) {
-  size_t rel_buf_idx = 0;
+  size_t rel_buf_idx = 4U;  // offset from msg_len
 
   uint32_t n_strs = 0;
-  memcpy(&n_strs, read_buf.data(), 4U);
+  memcpy(&n_strs, read_buf.data() + rel_buf_idx, 4U);
   if (n_strs == 0) return -1;
   rel_buf_idx += 4;
 
@@ -35,26 +38,29 @@ int parse_msg(Buffer& read_buf, std::vector<std::string>& str_list) {
     str.assign((const char*)(read_buf.data() + rel_buf_idx),
                static_cast<size_t>(str_len));
     rel_buf_idx += str_len;
+    str_list.push_back(str);
   }
 
   return 0;
 }
 
-void respond_to_client(Buffer& write_buf, const uint8_t* client_msg,
-                       uint32_t msg_len) {
-  /* Respond to client based on their message */
-  const char* response;
-  if (strncmp(reinterpret_cast<const char*>(client_msg), "ping", msg_len) ==
-      0) {
-    response = "pong";
+void respond_to_client(std::vector<std::string>& client_cmd,
+                       Response& server_resp) {
+  if (client_cmd[0] == "get") {
+    auto it = server_data.find(client_cmd[1]);
+    if (it == server_data.end()) {
+      server_resp.status = 1;
+      return;
+    }
+    server_resp.data.append(reinterpret_cast<uint8_t*>(&it->second[0]),
+                            static_cast<uint32_t>(it->second.size()));
+  } else if (client_cmd[0] == "set") {
+    server_data[client_cmd[1]] = client_cmd[2];
+  } else if (client_cmd[0] == "del") {
+    server_data.erase(client_cmd[1]);
   } else {
-    response = "unknown request";
+    server_resp.status = 1;
   }
-
-  uint32_t res_len = strlen(response);
-  write_buf.append((uint8_t*)&res_len,
-                   4);  // need to send res_len to client so it can parse
-  write_buf.append((uint8_t*)response, res_len);
 }
 
 bool parse_buffer(Conn* conn) {
@@ -68,13 +74,15 @@ bool parse_buffer(Conn* conn) {
     return false;
   }
 
-  std::vector<std::string> str_list;
-  if (parse_msg(conn->read_buf, str_list) < 0) {
+  std::vector<std::string> client_cmd;
+  if (parse_msg(conn->read_buf, client_cmd) < 0) {
     conn->want_close = true;
-    return;
+    return false;
   }
 
-  // TODO: update respond_to_client() to handle str_list and call here
+  Response server_resp;
+  respond_to_client(client_cmd, server_resp);
+  // TODO: add this data to write buffer and send to client
 
   conn->read_buf.consume(msg_len + 4);
 
