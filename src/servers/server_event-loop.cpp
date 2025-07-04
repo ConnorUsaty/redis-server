@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "buffer.h"
 #include "server.h"
 
 static std::map<std::string, std::string> server_data;
