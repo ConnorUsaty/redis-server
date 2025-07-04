@@ -83,12 +83,18 @@ void get_response(int client_fd) {
 
   // read the response now that we know the length
   err = read_all(client_fd, buffer + 4, response_len);
-  const char* server_response = buffer + 4;
   if (err) {
     std::cerr << "Error retriving response from server\n";
     return;
   }
-  std::cout << "Server says: " << server_response << "\n";
+
+  uint32_t resp_status;
+  memcpy(&resp_status, buffer + 4U, 4U);
+  std::string server_resp;
+  server_resp.assign(buffer + 8, response_len - 4);
+
+  std::cout << "Server status: " << resp_status << "\n";
+  std::cout << "Server response: " << server_resp << "\n";
 }
 
 int main() {
@@ -110,8 +116,9 @@ int main() {
 
   // send test message to server
   std::string large_str(1 << 8, '_');
-  std::vector<std::vector<std::string>> message_queue = {{"set", "key", "1"},
-                                                         {"get", "key"}};
+  std::vector<std::vector<std::string>> message_queue = {
+      {"set", "key", "1"}, {"get", "key"}, {"get", "random"},
+      {"get", large_str},  {"del", "key"}, {"get", "key"}};
   for (auto& s : message_queue) {
     send_message(client_fd, s);
   }
