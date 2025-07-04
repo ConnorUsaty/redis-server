@@ -41,14 +41,29 @@ uint8_t write_all(int client_fd, const char* buffer, int n_bytes) {
   return 0;
 }
 
-void send_message(int client_fd, std::string s) {
+void send_message(int client_fd, std::vector<std::string>& str_list) {
+  uint32_t total_len = 4U;
+  uint32_t n_strs = str_list.size();
+  for (auto const& s : str_list) {
+    total_len += 4 + s.size();
+  }
   std::vector<uint8_t> write_buffer;
-  size_t msg_len = s.size();
-  write_buffer.insert(write_buffer.end(), (const uint8_t*)&msg_len,
-                      (const uint8_t*)&msg_len + 4);
-  write_buffer.insert(write_buffer.end(),
-                      reinterpret_cast<const uint8_t*>(s.data()),
-                      reinterpret_cast<const uint8_t*>(s.data()) + msg_len);
+
+  // write msg_len
+  write_buffer.insert(write_buffer.end(), (const uint8_t*)&total_len,
+                      (const uint8_t*)&total_len + 4);
+  // write n_strs
+  write_buffer.insert(write_buffer.end(), (const uint8_t*)&n_strs,
+                      (const uint8_t*)&n_strs + 4);
+
+  for (auto const& s : str_list) {
+    size_t msg_len = s.size();
+    write_buffer.insert(write_buffer.end(), (const uint8_t*)&msg_len,
+                        (const uint8_t*)&msg_len + 4);
+    write_buffer.insert(write_buffer.end(),
+                        reinterpret_cast<const uint8_t*>(s.data()),
+                        reinterpret_cast<const uint8_t*>(s.data()) + msg_len);
+  }
   uint8_t err =
       write_all(client_fd, reinterpret_cast<const char*>(write_buffer.data()),
                 write_buffer.size());
@@ -57,7 +72,6 @@ void send_message(int client_fd, std::string s) {
     std::cerr << "Error sending message to server\n";
     return;
   }
-  std::cout << "Sent '" << s << "' to server\n";
 }
 
 void get_response(int client_fd) {
@@ -96,9 +110,9 @@ int main() {
 
   // send test message to server
   std::string large_str(1 << 8, '_');
-  std::vector<std::string> message_queue = {"ping", large_str, "ping",
-                                            large_str, "random"};
-  for (const auto& s : message_queue) {
+  std::vector<std::vector<std::string>> message_queue = {{"set", "key", "1"},
+                                                         {"get", "key"}};
+  for (auto& s : message_queue) {
     send_message(client_fd, s);
   }
   for (int i = 0; i < static_cast<int>(message_queue.size()); ++i) {
