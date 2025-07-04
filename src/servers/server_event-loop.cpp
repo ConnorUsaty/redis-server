@@ -45,21 +45,31 @@ int parse_msg(Buffer& read_buf, std::vector<std::string>& str_list) {
 }
 
 void respond_to_client(std::vector<std::string>& client_cmd,
-                       Response& server_resp) {
+                       Buffer& write_buf) {
+  Response server_resp;
+
   if (client_cmd[0] == "get") {
     auto it = server_data.find(client_cmd[1]);
     if (it == server_data.end()) {
       server_resp.status = 1;
-      return;
+    } else {
+      server_resp.data.append(reinterpret_cast<uint8_t*>(&it->second[0]),
+                              static_cast<uint32_t>(it->second.size()));
     }
-    server_resp.data.append(reinterpret_cast<uint8_t*>(&it->second[0]),
-                            static_cast<uint32_t>(it->second.size()));
   } else if (client_cmd[0] == "set") {
     server_data[client_cmd[1]] = client_cmd[2];
   } else if (client_cmd[0] == "del") {
     server_data.erase(client_cmd[1]);
   } else {
     server_resp.status = 1;
+  }
+
+  uint32_t resp_len = 4 + static_cast<uint32_t>(server_resp.data.size());
+  write_buf.append(reinterpret_cast<uint8_t*>(&resp_len), 4U);
+  write_buf.append(reinterpret_cast<uint8_t*>(&server_resp.status), 4U);
+  if (server_resp.data.size() > 0) {
+    write_buf.append(server_resp.data.data(),
+                     static_cast<uint32_t>(server_resp.data.size()));
   }
 }
 
@@ -80,10 +90,7 @@ bool parse_buffer(Conn* conn) {
     return false;
   }
 
-  Response server_resp;
-  respond_to_client(client_cmd, server_resp);
-  // TODO: add this data to write buffer and send to client
-
+  respond_to_client(client_cmd, conn->write_buf);
   conn->read_buf.consume(msg_len + 4);
 
   return true;
