@@ -97,6 +97,11 @@ struct Buffer {
   }
 };
 
+struct Response {
+  uint32_t status = 0;
+  Buffer data{64};
+};
+
 struct Conn {
   /* Struct that contains all relevant data for an open connection */
 
