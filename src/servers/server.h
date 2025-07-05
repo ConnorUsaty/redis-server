@@ -10,7 +10,9 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "buffer.h"
@@ -44,6 +46,33 @@ class ServerBase {
  protected:
   uint16_t port_;
   int64_t server_fd_;
+
+  /* Need to parse client_msg which follows:
+   * n_strs | len1 | str1 | len2 | str2 | ...
+   * " | " is there for readability and is not actually in the msg */
+  int parse_msg(Buffer& read_buf, std::vector<std::string>& client_cmd) {
+    size_t rel_buf_idx = 4U;  // offset from msg_len
+
+    uint32_t n_strs = 0;
+    memcpy(&n_strs, read_buf.data() + rel_buf_idx, 4U);
+    if (n_strs == 0) return -1;
+    rel_buf_idx += 4;
+
+    while (client_cmd.size() < n_strs) {
+      uint32_t str_len = 0;
+      memcpy(&str_len, read_buf.data() + rel_buf_idx, 4U);
+      if (str_len == 0) return -1;
+      rel_buf_idx += 4;
+
+      std::string str;
+      str.assign((const char*)(read_buf.data() + rel_buf_idx),
+                 static_cast<size_t>(str_len));
+      rel_buf_idx += str_len;
+      client_cmd.push_back(str);
+    }
+
+    return 0;
+  }
 
   void fd_set_nb(int fd) {
     /* Sets fd to non-blocking mode */
@@ -100,33 +129,6 @@ class ServerBase {
 class ServerEventLoop final : private ServerBase {
  private:
   std::map<std::string, std::string> server_data_;
-
-  /* Need to parse client_msg which follows:
-   * n_strs | len1 | str1 | len2 | str2 | ...
-   * " | " is there for readability and is not actually in the msg */
-  int parse_msg(Buffer& read_buf, std::vector<std::string>& str_list) {
-    size_t rel_buf_idx = 4U;  // offset from msg_len
-
-    uint32_t n_strs = 0;
-    memcpy(&n_strs, read_buf.data() + rel_buf_idx, 4U);
-    if (n_strs == 0) return -1;
-    rel_buf_idx += 4;
-
-    while (str_list.size() < n_strs) {
-      uint32_t str_len = 0;
-      memcpy(&str_len, read_buf.data() + rel_buf_idx, 4U);
-      if (str_len == 0) return -1;
-      rel_buf_idx += 4;
-
-      std::string str;
-      str.assign((const char*)(read_buf.data() + rel_buf_idx),
-                 static_cast<size_t>(str_len));
-      rel_buf_idx += str_len;
-      str_list.push_back(str);
-    }
-
-    return 0;
-  }
 
   void respond_to_client(std::vector<std::string>& client_cmd,
                          Buffer& write_buf) {
@@ -244,7 +246,7 @@ class ServerEventLoop final : private ServerBase {
  public:
   ServerEventLoop(int port) : ServerBase(port) {}
 
-  int run_event_loop() {
+  int run_server() {
     std::vector<Conn*> conn_list;  // key = fd, val = connection info
     std::vector<struct pollfd> poll_args;
 
@@ -298,5 +300,139 @@ class ServerEventLoop final : private ServerBase {
     }
 
     close(server_fd_);
+    return 0;
+  }
+};
+
+class ServerThreaded final : private ServerBase {
+ private:
+  std::map<std::string, std::string> server_data_;
+  std::mutex mtx_;  // to protect server_data_ from race conditions
+
+  void respond_to_client(std::vector<std::string>& client_cmd,
+                         Buffer& write_buf) {
+    Response server_resp;
+
+    if (client_cmd[0] == "get") {
+      std::scoped_lock lock_(mtx_);  // blocks until mutex free
+      auto it = server_data_.find(client_cmd[1]);
+      if (it == server_data_.end()) {
+        server_resp.status = 1;
+      } else {
+        server_resp.data.append(reinterpret_cast<uint8_t*>(&it->second[0]),
+                                static_cast<uint32_t>(it->second.size()));
+      }
+      // scoped_lock dtor called and mutex freed
+    } else if (client_cmd[0] == "set") {
+      std::scoped_lock lock_(mtx_);  // blocks until mutex free
+      server_data_[client_cmd[1]] = client_cmd[2];
+      // scoped_lock dtor called and mutex freed
+    } else if (client_cmd[0] == "del") {
+      std::scoped_lock lock_(mtx_);  // blocks until mutex free
+      server_data_.erase(client_cmd[1]);
+      // scoped_lock dtor called and mutex freed
+    } else {
+      server_resp.status = 1;
+    }
+
+    uint32_t resp_len = 4 + static_cast<uint32_t>(server_resp.data.size());
+    write_buf.append(reinterpret_cast<uint8_t*>(&resp_len), 4U);
+    write_buf.append(reinterpret_cast<uint8_t*>(&server_resp.status), 4U);
+    if (server_resp.data.size() > 0) {
+      write_buf.append(server_resp.data.data(),
+                       static_cast<uint32_t>(server_resp.data.size()));
+    }
+  }
+
+  uint8_t read_all(int client_fd, char* buffer, int n_bytes) {
+    /* Ensures that all requested n_bytes are read from socket into buffer.
+     * recv/read are not guarenteed to return all n_bytes. */
+    while (n_bytes) {
+      ssize_t rv = recv(client_fd, buffer, n_bytes, 0);
+      if (rv <= 0) {
+        return 1;  // error or unexpected EOF
+      }
+      assert((int)rv <= n_bytes);
+      n_bytes -= rv;
+      buffer += rv;  // move pointer to next avail location
+    }
+    return 0;
+  }
+
+  uint8_t write_all(int client_fd, char* buffer, int n_bytes) {
+    /* Ensures that all requested n_bytes are written from buffer into socket.
+     * send/write are not guarenteed to return all n_bytes. */
+    while (n_bytes) {
+      ssize_t rv = send(client_fd, buffer, n_bytes, 0);
+      if (rv <= 0) {
+        return 1;  // error
+      }
+      assert((int)rv <= n_bytes);
+      n_bytes -= rv;
+      buffer += rv;  // move pointer to next unwritten location
+    }
+    return 0;
+  }
+
+  void handle_request(int client_fd) {
+    std::cout << "Connected to client: " << client_fd << "\n";
+
+    char buffer[1024] = {};
+    // blocks until we read 4 bytes that contain msg_len
+    uint8_t err = read_all(client_fd, buffer, 4);
+    if (err) {
+      std::cerr << "Error reading from client\n";
+      return;
+    }
+
+    Buffer read_buf{128};
+    uint32_t msg_len;
+    memcpy(&msg_len, buffer, 4U);
+    read_buf.append(reinterpret_cast<uint8_t*>(&msg_len), 4U);
+
+    // this blocks this thread until message is read
+    err = read_all(client_fd, buffer, msg_len + 4);
+    read_buf.append(reinterpret_cast<uint8_t*>(buffer), msg_len + 4);
+
+    std::vector<std::string> client_cmd;
+    if (parse_msg(read_buf, client_cmd) < 0) {
+      return;
+    }
+
+    Buffer write_buf{128};
+    respond_to_client(client_cmd, write_buf);
+    // response will now be in write_buf
+
+    err = write_all(client_fd, reinterpret_cast<char*>(write_buf.data()),
+                    write_buf.size());
+    if (err) {
+      std::cerr << "Error writing to client\n";
+      return;
+    }
+    close(client_fd);  // close connection to client
+  }
+
+ public:
+  ServerThreaded(int port) : ServerBase(port) {}
+
+  int run_server() {
+    while (1) {
+      // accept incoming connections and get connection fd
+      struct sockaddr_in client_addr = {};
+      socklen_t addrlen = sizeof(client_addr);
+
+      int client_fd =
+          accept(server_fd_, (struct sockaddr*)&client_addr, &addrlen);
+      if (client_fd < 0) {
+        continue;
+      }
+
+      std::thread t(&ServerThreaded::handle_request, this, client_fd);
+      t.detach();
+    }
+
+    // close the listening server socket
+    close(server_fd_);
+    return 0;
   }
 };
