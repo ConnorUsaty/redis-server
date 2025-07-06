@@ -344,72 +344,77 @@ class ServerThreaded final : private ServerBase {
     }
   }
 
-  uint8_t read_all(int client_fd, char* buffer, int n_bytes) {
-    /* Ensures that all requested n_bytes are read from socket into buffer.
-     * recv/read are not guarenteed to return all n_bytes. */
-    while (n_bytes) {
-      ssize_t rv = recv(client_fd, buffer, n_bytes, 0);
-      if (rv <= 0) {
-        return 1;  // error or unexpected EOF
-      }
-      assert((int)rv <= n_bytes);
-      n_bytes -= rv;
-      buffer += rv;  // move pointer to next avail location
-    }
-    return 0;
-  }
+  bool parse_buffer(Buffer& read_buf, Buffer& write_buf) {
+    if (read_buf.size() < 4) return false;
 
-  uint8_t write_all(int client_fd, char* buffer, int n_bytes) {
-    /* Ensures that all requested n_bytes are written from buffer into socket.
-     * send/write are not guarenteed to return all n_bytes. */
-    while (n_bytes) {
-      ssize_t rv = send(client_fd, buffer, n_bytes, 0);
-      if (rv <= 0) {
-        return 1;  // error
-      }
-      assert((int)rv <= n_bytes);
-      n_bytes -= rv;
-      buffer += rv;  // move pointer to next unwritten location
+    // first 4 bytes of msg stores total size of msg in bytes
+    uint32_t msg_len = 0;
+    memcpy(&msg_len, static_cast<void*>(read_buf.data()), 4);
+    if (4 + msg_len > read_buf.size()) {
+      return false;  // not enough data yet
     }
-    return 0;
+
+    std::vector<std::string> client_cmd;
+    if (parse_msg(read_buf, client_cmd) < 0) {
+      return false;
+    }
+
+    respond_to_client(client_cmd, write_buf);
+    read_buf.consume(msg_len + 4);
+
+    return true;
   }
 
   void handle_request(int client_fd) {
     std::cout << "Connected to client: " << client_fd << "\n";
 
-    char buffer[1024] = {};
-    // blocks until we read 4 bytes that contain msg_len
-    uint8_t err = read_all(client_fd, buffer, 4);
-    if (err) {
-      std::cerr << "Error reading from client\n";
-      return;
+    Buffer read_buf{256};
+    Buffer write_buf{256};
+    uint8_t temp_buffer[64 * 1024];
+
+    while (1) {
+      ssize_t rv =
+          recv(client_fd, temp_buffer, sizeof(temp_buffer), MSG_DONTWAIT);
+
+      if (rv > 0) {
+        // got data, append to read buffer
+        read_buf.append(temp_buffer, rv);
+      } else if (rv == 0) {
+        // client closed connection
+        break;
+      } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        // real error
+        std::cerr << "Error reading from client\n";
+        break;
+      }
+
+      // process all complete messages in the buffer
+      while (parse_buffer(read_buf, write_buf)) {
+      }
+
+      // send any pending responses
+      if (write_buf.size() > 0) {
+        ssize_t sent = 0;
+        while (sent < static_cast<ssize_t>(write_buf.size())) {
+          ssize_t rv = send(client_fd, write_buf.data() + sent,
+                            write_buf.size() - sent, 0);
+          if (rv <= 0) {
+            std::cerr << "Error writing to client\n";
+            close(client_fd);
+            return;
+          }
+          sent += rv;
+        }
+        write_buf.clear();
+      }
+
+      // if no data was read and no data pending, wait a bit before trying again
+      if (rv < 0 && read_buf.size() == 0) {
+        usleep(1000);  // 1ms sleep to avoid busy waiting
+      }
     }
 
-    Buffer read_buf{128};
-    uint32_t msg_len;
-    memcpy(&msg_len, buffer, 4U);
-    read_buf.append(reinterpret_cast<uint8_t*>(&msg_len), 4U);
-
-    // this blocks this thread until message is read
-    err = read_all(client_fd, buffer, msg_len + 4);
-    read_buf.append(reinterpret_cast<uint8_t*>(buffer), msg_len + 4);
-
-    std::vector<std::string> client_cmd;
-    if (parse_msg(read_buf, client_cmd) < 0) {
-      return;
-    }
-
-    Buffer write_buf{128};
-    respond_to_client(client_cmd, write_buf);
-    // response will now be in write_buf
-
-    err = write_all(client_fd, reinterpret_cast<char*>(write_buf.data()),
-                    write_buf.size());
-    if (err) {
-      std::cerr << "Error writing to client\n";
-      return;
-    }
-    close(client_fd);  // close connection to client
+    close(client_fd);
   }
 
  public:
