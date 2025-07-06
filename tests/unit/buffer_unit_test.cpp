@@ -2,7 +2,7 @@
 
 #include <random>
 
-#include "../../src/servers/buffer.h"
+#include "buffer.h"
 
 class BufferTest : public ::testing::Test {
  protected:
