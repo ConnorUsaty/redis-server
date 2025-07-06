@@ -6,6 +6,10 @@ A C++20 implementation comparing event-driven vs threaded architectures. Optimiz
 - **Latency**: 43.6μs (event-loop) vs 1.1ms (threaded) - 25x improvement
 - **Throughput**: 68k ops/sec with 16 concurrent clients (event-loop)
 
+  
+![image](https://github.com/user-attachments/assets/a3289e63-0723-4551-9b12-b42670b8d706)
+
+
 ## Key Optimizations
 - Custom cache-friendly, memory-aligned Buffer class with O(1) reads, appends, consumes, and clears
 - Concurrent lock-free event loop that uses non-blocking I/O and a single thread to handle multiple clients concurrently
