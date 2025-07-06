@@ -37,8 +37,8 @@ struct Conn {
   Conn() = default;
 };
 
-/* ServerBase is a base class meant to be inherited and used to implement the 3
- * concurrency architectures (multi-processed, multi-threaded, event-based) */
+/* ServerBase is a base class meant to be inherited and used to implement the
+ * different concurrency architectures (multi-threaded, event-based) */
 class ServerBase {
  protected:
   uint16_t port_;
@@ -77,7 +77,7 @@ class ServerBase {
   }
 
   int64_t setup_socket() {
-    /* Socket setup is the same for all 3 concurrency architectures */
+    /* Socket setup is the same for all concurrency architectures */
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     // set options for socket, most important is SO_REUSEADDR, without setting
