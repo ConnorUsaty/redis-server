@@ -1,7 +1,15 @@
-# redis-server
-Making a redis server from scratch in C++
+# High-Performance Key-Value Store
 
-### TODO:
-- Implement multi-processed architecture using Linux fork() syscall
-- Implement the Server as a base class using singleton design pattern and have the 3 concurrency architectures as derived classes
-- Benchmark the 3 implementations against each other using Boost and GoogleTest
+A C++20 implementation comparing event-driven vs threaded architectures. Optimized for low-latency and high-throughput.
+
+## Performance Results
+- **Latency**: 43.6μs (event-loop) vs 1.1ms (threaded) - 25x improvement
+- **Throughput**: 68k ops/sec with 16 concurrent clients (event-loop)
+
+## Key Optimizations
+- Custom cache-friendly, memory-aligned Buffer class with O(1) reads, appends, consumes, and clears
+- Concurrent lock-free event loop that uses non-blocking I/O and a single thread to handle multiple clients concurrently
+
+## Future Improvements
+- epoll/io_uring for better scalability for ServerEventLoop
+- Thread pool for ServerThreaded
