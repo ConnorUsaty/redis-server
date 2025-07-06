@@ -9,10 +9,10 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "buffer.h"
@@ -36,9 +36,6 @@ struct Conn {
 
   Conn() = default;
 };
-
-// TODO: Move all functional testing into a tests/ dir and just have the classes
-// in this dir
 
 /* ServerBase is a base class meant to be inherited and used to implement the 3
  * concurrency architectures (multi-processed, multi-threaded, event-based) */
@@ -82,13 +79,11 @@ class ServerBase {
   int64_t setup_socket() {
     /* Socket setup is the same for all 3 concurrency architectures */
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    std::cout << "Created socket\n";
 
     // set options for socket, most important is SO_REUSEADDR, without setting
     // socket cannot bind to same IP:port after restart
     int val = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
-    std::cout << "Set socket options\n";
 
     // set socket addresses
     struct sockaddr_in addr = {};
@@ -101,18 +96,14 @@ class ServerBase {
       std::cerr << "Failed to bind to port\n";
       return -1;
     }
-    std::cout << "Bound socket to port\n";
 
     // set port to be listening (server), rather then connecting (client)
     if (listen(server_fd, SOMAXCONN) != 0) {
       std::cerr << "Failed to listen\n";
       return -1;
     }
-    std::cout << "Set socket to listening\n";
 
     fd_set_nb(server_fd);
-    std::cout << "Set socket to non-blocking\n";
-
     return server_fd;
   }
 
@@ -122,13 +113,12 @@ class ServerBase {
     if (server_fd_ < 0) {
       throw std::runtime_error("Failed to open server socket\n");
     }
-    std::cout << "Server socket successfully setup!\n";
   }
 };
 
 class ServerEventLoop final : private ServerBase {
  private:
-  std::map<std::string, std::string> server_data_;
+  std::unordered_map<std::string, std::string> server_data_;
 
   void respond_to_client(std::vector<std::string>& client_cmd,
                          Buffer& write_buf) {
@@ -306,7 +296,7 @@ class ServerEventLoop final : private ServerBase {
 
 class ServerThreaded final : private ServerBase {
  private:
-  std::map<std::string, std::string> server_data_;
+  std::unordered_map<std::string, std::string> server_data_;
   std::mutex mtx_;  // to protect server_data_ from race conditions
 
   void respond_to_client(std::vector<std::string>& client_cmd,
@@ -366,8 +356,6 @@ class ServerThreaded final : private ServerBase {
   }
 
   void handle_request(int client_fd) {
-    std::cout << "Connected to client: " << client_fd << "\n";
-
     Buffer read_buf{256};
     Buffer write_buf{256};
     uint8_t temp_buffer[64 * 1024];
