@@ -1,17 +1,8 @@
-#include <arpa/inet.h>
 #include <gtest/gtest.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
-#include <atomic>
-#include <chrono>
-#include <future>
-#include <random>
-#include <thread>
-
-#include "buffer.h"
-#include "server.h"
+#include "Buffer.h"
+#include "ServerEventLoop.h"
+#include "ServerThreaded.h"
 
 // helper to create a client connection
 int create_client_connection(uint16_t port) {

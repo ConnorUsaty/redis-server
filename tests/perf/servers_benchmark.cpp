@@ -1,17 +1,8 @@
-#include <arpa/inet.h>
 #include <benchmark/benchmark.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
-#include <atomic>
-#include <chrono>
-#include <cstring>
-#include <thread>
-#include <vector>
-
-#include "server.h"
+#include "ServerEventLoop.h"
+#include "ServerThreaded.h"
 
 // global port counter to avoid conflicts
 static std::atomic<uint16_t> g_port_counter{20000};
