@@ -17,3 +17,32 @@ A C++20 implementation comparing event-driven vs threaded architectures. Optimiz
 ## Future Improvements
 - epoll/io_uring for better scalability for ServerEventLoop
 - Thread pool for ServerThreaded
+
+## Usage
+To build all .exe (test and usage) run `./build.sh`
+
+Then to easily start the server and client run `./run_client_and_server.sh`
+
+To run the server and client one by one in seperate terminals:
+```
+cd build/
+./server_event-loop.exe
+```
+And in your second terminal:
+```
+cd build/
+./client.exe
+```
+
+## Tests
+To build all .exe (test and usage) run `./build.sh`
+
+To run all unit tests:
+```
+cd build/
+ctest
+```
+
+To run an individual unit test `cd build/` then choose between `./servers_unit_test` and `./buffer_unit_test`
+
+To run the benchmarks `cd build/` and then `./servers_benchmark`
