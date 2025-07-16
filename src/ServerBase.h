@@ -7,8 +7,10 @@
 
 #include "buffer.h"
 
+enum class Status : uint32_t { Valid, Invalid, Error, Close };
+
 struct Response {
-  uint32_t status = 0;
+  Status status = Status::Valid;
   Buffer data{64};
 };
 

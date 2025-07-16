@@ -7,8 +7,11 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
+
+enum class Status : uint32_t { Valid, Invalid, Error, Close };
 
 uint8_t read_all(int client_fd, char* buffer, int n_bytes) {
   /* Ensures that all requested n_bytes are read from socket into buffer.
@@ -41,7 +44,21 @@ uint8_t write_all(int client_fd, const char* buffer, int n_bytes) {
   return 0;
 }
 
-void send_message(int client_fd, std::vector<std::string>& str_list) {
+Status send_message(int client_fd, std::vector<std::string>& str_list) {
+  if (str_list[0] == "close") {
+    return Status::Close;
+  }
+
+  if (str_list[0] != "get" && str_list[0] != "set" && str_list[0] != "del") {
+    return Status::Invalid;
+  } else if (str_list[0] == "get" && str_list.size() != 2U) {
+    return Status::Invalid;
+  } else if (str_list[0] == "set" && str_list.size() != 3U) {
+    return Status::Invalid;
+  } else if (str_list[0] == "del" && str_list.size() != 2U) {
+    return Status::Invalid;
+  }
+
   uint32_t total_len = 4U;
   uint32_t n_strs = str_list.size();
   for (auto const& s : str_list) {
@@ -69,9 +86,10 @@ void send_message(int client_fd, std::vector<std::string>& str_list) {
                 write_buffer.size());
 
   if (err) {
-    std::cerr << "Error sending message to server\n";
-    return;
+    return Status::Error;
   }
+
+  return Status::Valid;
 }
 
 void get_response(int client_fd) {
@@ -88,13 +106,32 @@ void get_response(int client_fd) {
     return;
   }
 
-  uint32_t resp_status;
+  Status resp_status;
   memcpy(&resp_status, buffer + 4U, 4U);
   std::string server_resp;
   server_resp.assign(buffer + 8, response_len - 4);
 
-  std::cout << "Server status: " << resp_status << "\n";
-  std::cout << "Server response: " << server_resp << "\n";
+  if (resp_status == Status::Valid) {
+    std::cout << "Command successfully processed\n";
+  } else if (resp_status == Status::Invalid) {
+    std::cout << "Key not found\n";
+  }
+
+  if (server_resp.size() > 0) {
+    std::cout << "Server response: " << server_resp << "\n";
+  }
+}
+
+std::vector<std::string> parse_user_input(const std::string& input_str) {
+  std::vector<std::string> args;
+  std::istringstream iss(input_str);
+  std::string token;
+
+  while (iss >> token) {
+    args.push_back(token);
+  }
+
+  return args;
 }
 
 int main() {
@@ -114,15 +151,28 @@ int main() {
     return 1;
   }
 
-  // send test message to server
-  std::string large_str(1 << 8, '_');
-  std::vector<std::vector<std::string>> message_queue = {
-      {"set", "key", "1"}, {"get", "key"}, {"get", "random"},
-      {"get", large_str},  {"del", "key"}, {"get", "key"}};
-  for (auto& s : message_queue) {
-    send_message(client_fd, s);
-  }
-  for (int i = 0; i < static_cast<int>(message_queue.size()); ++i) {
+  std::string user_input;
+
+  // loop until user requests a close
+  while (1) {
+    std::cout << "> ";
+    std::getline(std::cin, user_input);
+
+    if (user_input.empty()) continue;
+
+    std::vector<std::string> args = parse_user_input(user_input);
+    Status status = send_message(client_fd, args);
+    if (status == Status::Invalid) {
+      std::cout << "Invalid input\n";
+      continue;
+    } else if (status == Status::Error) {
+      std::cerr << "Error sending message to server\n";
+      continue;
+    } else if (status == Status::Close) {
+      std::cout << "User requested close\n";
+      break;
+    }
+
     get_response(client_fd);
   }
 

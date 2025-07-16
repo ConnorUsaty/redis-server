@@ -24,7 +24,7 @@ class ServerThreaded final : private ServerBase {
       std::scoped_lock lock_(mtx_);  // blocks until mutex free
       auto it = server_data_.find(client_cmd[1]);
       if (it == server_data_.end()) {
-        server_resp.status = 1;
+        server_resp.status = Status::Invalid;
       } else {
         server_resp.data.append(reinterpret_cast<uint8_t*>(&it->second[0]),
                                 static_cast<uint32_t>(it->second.size()));
@@ -39,7 +39,7 @@ class ServerThreaded final : private ServerBase {
       server_data_.erase(client_cmd[1]);
       // scoped_lock dtor called and mutex freed
     } else {
-      server_resp.status = 1;
+      server_resp.status = Status::Invalid;
     }
 
     uint32_t resp_len = 4 + static_cast<uint32_t>(server_resp.data.size());
