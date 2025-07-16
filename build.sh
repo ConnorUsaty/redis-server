@@ -1,3 +1,4 @@
+#!/bin/bash
 
 # builds everything through cmake
 mkdir -p build
